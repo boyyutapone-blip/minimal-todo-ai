@@ -1,0 +1,115 @@
+# To-Do 应用后端集成：Supabase + 通义千问 API
+
+将现有的纯前端 Vite + React 待办事项应用接入 Supabase 数据库和通义千问 (DashScope) 大模型 API，实现数据持久化和 AI 语音分拣功能。
+
+## User Review Required
+
+> [!IMPORTANT]
+> **架构选择**：当前项目使用 **Vite + React**（非 Next.js），没有内置 API 路由功能。方案是利用项目中已有的 **Express** 依赖创建独立的后端服务器（`server.ts`），通过 Vite 的 `proxy` 配置在开发模式下转发 `/api/*` 请求。
+
+> [!WARNING]
+> **Quadrant 大小写映射**：UI 中使用小写 `'q1' | 'q2' | 'q3' | 'q4'`，数据库设计要求大写 `'Q1' | 'Q2' | 'Q3' | 'Q4'`。为尽量减少前端改动，我计划**统一使用小写** (`q1`-`q4`) 作为 DB 值和前端值，保持一致性。如果您坚持数据库用大写，我会在读写时加转换层。
+
+> [!IMPORTANT]
+> **环境变量**：实现需要以下密钥，请确认您已准备好：
+> - `SUPABASE_URL`：Supabase 项目 URL
+> - `SUPABASE_ANON_KEY`：Supabase 匿名密钥（前端用）
+> - `DASHSCOPE_API_KEY`：通义千问 API 密钥（后端用）
+
+---
+
+## Proposed Changes
+
+### 1. 数据库 SQL
+
+#### [NEW] [supabase_schema.sql](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/supabase_schema.sql)
+
+创建 `tasks` 表的完整 SQL，包括：
+- `id` (uuid, 主键, 默认 `gen_random_uuid()`)
+- `title` (text, 非空)
+- `quadrant` (text, `CHECK` 约束只允许 `'q1','q2','q3','q4'`)
+- `tags` (text[], 默认 `'{}'`)
+- `is_important` (boolean, 默认 false)
+- `is_completed` (boolean, 默认 false)
+- `created_at` (timestamptz, 默认 `now()`)
+- 启用 Row Level Security + 公共读写策略（简化版 demo 用）
+
+---
+
+### 2. 环境配置
+
+#### [MODIFY] [.env.example](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.example)
+
+添加 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`DASHSCOPE_API_KEY` 示例变量。
+
+#### [NEW] [.env.local](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.local)
+
+实际环境变量文件（用户自行填入密钥）。
+
+---
+
+### 3. Supabase Client
+
+#### [NEW] [src/lib/supabase.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/lib/supabase.ts)
+
+初始化 `@supabase/supabase-js` 客户端，读取 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 环境变量（Vite 要求 `VITE_` 前缀暴露给前端）。
+
+---
+
+### 4. Express 后端 API 服务器
+
+#### [NEW] [server.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/server.ts)
+
+使用 Express 创建后端服务器，包含：
+- `POST /api/parse-task`：接收 `{ text: string }` 请求体
+  1. 调用通义千问 (DashScope) API（使用 OpenAI SDK 兼容格式）
+  2. System Prompt 按用户要求设定（时间管理大师角色）
+  3. 解析大模型返回的 JSON
+  4. 将解析结果插入 Supabase `tasks` 表
+  5. 返回 200 + 创建的任务数据
+
+#### [MODIFY] [vite.config.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/vite.config.ts)
+
+添加 `server.proxy` 配置，将 `/api` 请求代理到 Express 服务（端口 3001）。
+
+#### [MODIFY] [package.json](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/package.json)
+
+- 添加依赖：`@supabase/supabase-js`、`openai`
+- 添加 `dev:server` 脚本（`npx tsx server.ts`）
+- 修改 `dev` 脚本为同时启动前后端（使用 `concurrently`）
+
+---
+
+### 5. 前端集成
+
+#### [MODIFY] [src/App.tsx](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx)
+
+核心改动：
+
+1. **数据加载**：移除 `initialTasks`，使用 `useEffect` + Supabase client 在页面加载时 `SELECT * FROM tasks ORDER BY created_at DESC` 获取数据。添加 `loading` 状态。
+
+2. **[toggleTask](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx#74-77) 函数**：更新任务完成状态时同步写入 Supabase（`UPDATE tasks SET is_completed = ... WHERE id = ...`）。
+
+3. **[addTask](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx#78-88) 函数**：新建任务时 `INSERT INTO tasks` 并从返回值获取真实 `id`。
+
+4. **[VoiceModal](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx#528-597) 组件**："转换为任务"按钮点击时，将 `transcript` 文本 POST 到 `/api/parse-task`，拿到结构化数据后调用 [addTask](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx#78-88)（该函数已会写入 Supabase）。
+
+5. **字段映射**：前端 `isFlagged` ↔ 数据库 `is_important`，在读取和写入时做映射。
+
+---
+
+## Verification Plan
+
+### 自动化验证
+
+1. **TypeScript 编译检查**：`npx tsc --noEmit` 确保无类型错误
+2. **Vite 构建检查**：`npm run build` 确保无构建错误
+
+### 手动验证
+
+1. **数据库**：将 `supabase_schema.sql` 中的 SQL 复制到 Supabase Dashboard → SQL Editor 执行，确认表创建成功
+2. **环境变量**：配置 `.env.local` 后启动应用
+3. **任务加载**：启动应用后，页面应显示从 Supabase 加载的任务（首次为空），而非硬编码数据
+4. **新建任务**：通过 TaskModal 新建任务，刷新页面后任务应仍然存在
+5. **完成任务**：点击任务完成勾选框，刷新页面后状态应保持
+6. **语音分拣**：在 VoiceModal 输入文本并点击"转换为任务"，应通过 AI 解析后自动创建结构化任务

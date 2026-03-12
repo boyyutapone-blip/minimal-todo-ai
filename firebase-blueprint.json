@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "A user's task",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the task"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the task is completed"
+        },
+        "quadrant": {
+          "type": "string",
+          "enum": ["q1", "q2", "q3", "q4"],
+          "description": "The Eisenhower matrix quadrant"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags associated with the task"
+        },
+        "isFlagged": {
+          "type": "boolean",
+          "description": "Whether the task is flagged"
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns the task"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the task was created"
+        }
+      },
+      "required": ["title", "completed", "quadrant", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Tasks belonging to users"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+# Walkthrough: To-Do 应用后端集成
+
+## 完成的工作
+
+将纯前端 Vite + React 待办事项应用改造为全栈应用，实现数据持久化（Supabase）和 AI 语音分拣（通义千问 DashScope）。
+
+## 架构设计
+
+```mermaid
+graph LR
+  A["前端 React App"] -->|CRUD| B["Supabase DB"]
+  A -->|POST /api/parse-task| C["Express Server"]
+  C -->|OpenAI SDK| D["通义千问 DashScope"]
+  D -->|JSON| C
+  C -->|JSON| A
+  A -->|addTask 写入| B
+```
+
+> [!IMPORTANT]
+> **单一写入点**：所有数据库写入均由前端 [addTask()](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx#125-148) 函数统一执行。后端 `/api/parse-task` 仅做 AI 解析，不触碰数据库。
+
+---
+
+## 新增/修改的文件
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| [supabase_schema.sql](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/supabase_schema.sql) | 新增 | tasks 表 DDL + RLS 策略 + 索引 |
+| [.env.example](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.example) | 修改 | 添加 Supabase + DashScope 环境变量模板 |
+| [.env.local](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.local) | 新增 | 实际密钥文件（需用户填写） |
+| [src/lib/supabase.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/lib/supabase.ts) | 新增 | Supabase 客户端初始化 |
+| [server.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/server.ts) | 新增 | Express 后端，`/api/parse-task` AI 解析接口 |
+| [vite.config.ts](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/vite.config.ts) | 修改 | 添加 `/api` → localhost:3001 代理 |
+| [package.json](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/package.json) | 修改 | 新依赖 + `dev`/`dev:server` 脚本 |
+| [src/App.tsx](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/src/App.tsx) | 修改 | Supabase CRUD + VoiceModal AI 集成 |
+
+---
+
+## 启动前的配置步骤
+
+### 1. 创建 Supabase 数据库表
+
+将 [supabase_schema.sql](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/supabase_schema.sql) 中的全部 SQL 复制到 **Supabase Dashboard → SQL Editor** 中执行。
+
+### 2. 填写环境变量
+
+编辑 [.env.local](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.local)，替换为真实密钥：
+
+```bash
+VITE_SUPABASE_URL="https://xxx.supabase.co"
+VITE_SUPABASE_ANON_KEY="eyJhbG..."
+DASHSCOPE_API_KEY="sk-..."
+```
+
+### 3. 启动应用
+
+```bash
+npm run dev
+```
+
+此命令会同时启动：
+- **前端** Vite dev server（端口 3000）
+- **后端** Express API server（端口 3001）
+
+---
+
+## 验证结果
+
+- ✅ **Vite 构建成功**：`npx vite build` → `✓ built in 10.23s`
+- ✅ **依赖安装成功**：`@supabase/supabase-js`、`openai`、`concurrently`
+- ✅ **[.gitignore](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.gitignore) 正确**：[.env.local](file:///d:/HuaweiMoveData/Users/RAY0826/Desktop/manager/.env.local) 不会被提交
+
+### 用户需手动验证
+
+1. 执行 SQL 后确认 Supabase 中 `tasks` 表已创建
+2. `npm run dev` 启动后，页面加载时从 Supabase 读取任务
+3. 新建任务 → 刷新页面 → 任务仍然存在
+4. 勾选完成 → 刷新页面 → 状态保持
+5. 语音弹窗输入文本 → 点击"转换为任务" → AI 自动分拣并创建结构化任务
