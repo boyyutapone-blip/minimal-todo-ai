@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) {
+export default function AuthView() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,44 +14,60 @@ export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) 
     setError('');
     setLoading(true);
 
-    // Mock login delay
-    setTimeout(() => {
+    try {
+      if (isLogin) {
+        // 登录逻辑
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) throw signInError;
+      } else {
+        // 注册逻辑
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (signUpError) throw signUpError;
+        if (!isLogin) {
+          setError('注册成功！请检查邮箱确认邮件或直接尝试登录。');
+        }
+      }
+    } catch (err: any) {
+      console.error('认证错误:', err.message);
+      setError(err.message || '操作失败，请重试');
+    } finally {
       setLoading(false);
-      onLogin({ 
-        email, 
-        displayName: email.split('@')[0],
-        uid: 'mock-user-123'
-      });
-    }, 800);
+    }
   };
 
   return (
-    <div className="flex h-screen w-full flex-col max-w-md mx-auto bg-white shadow-xl overflow-hidden font-sans text-slate-900 dark:bg-slate-900 dark:text-white">
-      <div className="flex-1 flex flex-col justify-center px-8">
-        <div className="mb-10 text-center">
+    <div className="flex h-screen w-full flex-col justify-center items-center bg-[#f8f8fc] dark:bg-slate-900 font-sans text-slate-900 p-4 transition-colors">
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-100 dark:border-slate-800 transition-colors">
+        <div className="mb-8 text-center">
           <div className="w-16 h-16 bg-[#6464f2] rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg shadow-[#6464f2]/30">
-            <span className="text-white text-3xl font-bold">T</span>
+            <span className="text-white text-3xl font-bold italic">A</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight mb-2">
-            {isLogin ? '欢迎回来' : '创建新账号'}
+          <h1 className="text-2xl font-bold tracking-tight mb-2 dark:text-white">
+            {isLogin ? '极简待办' : '加入极客行列'}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400">
-            {isLogin ? '登录以继续管理您的任务' : '注册以开始您的高效之旅'}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {isLogin ? '输入您的账号开启高效一天' : '创建一个云端同步的专属空间'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-xl flex items-center gap-2 text-sm">
+            <div className={`p-3 rounded-xl flex items-center gap-2 text-sm ${error.includes('成功') ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
               <AlertCircle size={16} />
               <span>{error}</span>
             </div>
           )}
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 ml-1">邮箱</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">邮箱地址</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                 <Mail size={18} className="text-slate-400" />
               </div>
               <input
@@ -58,16 +75,16 @@ export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6464f2] focus:border-transparent transition-all dark:text-white"
-                placeholder="your@email.com"
+                className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-[#6464f2]/30 dark:focus:border-[#6464f2]/50 rounded-2xl focus:outline-none transition-all dark:text-white placeholder:text-slate-300"
+                placeholder="geek@example.com"
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 ml-1">密码</label>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">进入密码</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                 <Lock size={18} className="text-slate-400" />
               </div>
               <input
@@ -75,7 +92,7 @@ export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6464f2] focus:border-transparent transition-all dark:text-white"
+                className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-[#6464f2]/30 dark:focus:border-[#6464f2]/50 rounded-2xl focus:outline-none transition-all dark:text-white placeholder:text-slate-300"
                 placeholder="••••••••"
               />
             </div>
@@ -84,9 +101,9 @@ export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) 
           <button
             type="submit"
             disabled={loading || !email || !password}
-            className="w-full bg-[#6464f2] text-white font-bold py-3.5 rounded-xl shadow-lg shadow-[#6464f2]/25 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] mt-6"
+            className="w-full bg-[#6464f2] hover:bg-[#5a5add] text-white font-bold py-4 rounded-2xl shadow-xl shadow-[#6464f2]/20 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98] mt-6 flex items-center justify-center gap-2"
           >
-            {loading ? '请稍候...' : (isLogin ? '登录' : '注册')}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : (isLogin ? '安全登录' : '创建账号')}
           </button>
         </form>
 
@@ -96,12 +113,16 @@ export default function AuthView({ onLogin }: { onLogin: (user: any) => void }) 
               setIsLogin(!isLogin);
               setError('');
             }}
-            className="text-sm text-slate-500 dark:text-slate-400 hover:text-[#6464f2] dark:hover:text-[#6464f2] transition-colors"
+            className="text-sm font-semibold text-slate-400 hover:text-[#6464f2] transition-colors"
           >
-            {isLogin ? '没有账号？点击注册' : '已有账号？点击登录'}
+            {isLogin ? '还没有账号？极速注册' : '已有账号？返回登录'}
           </button>
         </div>
       </div>
+      
+      <p className="mt-8 text-xs text-slate-400 dark:text-slate-600 font-mono tracking-tighter">
+        VITE_APP_TODO // MULTI_TENANT_SECURE_CHANNEL
+      </p>
     </div>
   );
 }

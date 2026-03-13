@@ -95,14 +95,38 @@ export default function App() {
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [user, setUser] = useState<any | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // ── 监听 Auth 状态变化 ──
+  useEffect(() => {
+    // 获取初始 Session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsAuthReady(true);
+    });
+
+    // 订阅状态变更
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session) {
+        fetchTasks();
+      } else {
+        setTasks([]); // 登出清空数据
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Timer State
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'focus' | 'shortBreak' | 'longBreak'>('focus');
   const [pomodoroCount, setPomodoroCount] = useState(0);
+
+  // Date Filtering State for List View
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // ── 从 Supabase 加载任务 ──
   const fetchTasks = useCallback(async () => {
@@ -265,11 +289,18 @@ export default function App() {
   };
 
   if (!isAuthReady) {
-    return <div className="flex h-screen items-center justify-center bg-[#f8f8fc] dark:bg-slate-900"><div className="w-8 h-8 border-4 border-[#6464f2] border-t-transparent rounded-full animate-spin"></div></div>;
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f8f8fc] dark:bg-slate-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-[#6464f2] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-400 text-sm font-medium animate-pulse">建立安全连接...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
-    return <AuthView onLogin={setUser} />;
+    return <AuthView />;
   }
 
   return (
@@ -277,7 +308,15 @@ export default function App() {
       {/* Toast */}
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
 
-      {activeTab === 'list' && <TodayTasks tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} />}
+      {activeTab === 'list' && (
+        <TodayTasks
+          tasks={tasks}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          toggleTask={toggleTask}
+          deleteTask={deleteTask}
+        />
+      )}
       {activeTab === 'grid' && <QuadrantView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} />}
       {activeTab === 'calendar' && <CalendarView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} />}
       {activeTab === 'timer' && (
@@ -290,7 +329,7 @@ export default function App() {
           pomodoroCount={pomodoroCount}
         />
       )}
-      {activeTab === 'settings' && <SettingsView user={user} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onLogout={() => setUser(null)} />}
+      {activeTab === 'settings' && <SettingsView user={user} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onLogout={() => supabase.auth.signOut()} />}
 
       {/* FAB */}
       {activeTab !== 'settings' && activeTab !== 'timer' && (
@@ -342,13 +381,44 @@ const NavItem = ({ icon, active, onClick }: { icon: React.ReactNode, active: boo
   </button>
 );
 
-const TodayTasks = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void }) => {
+const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTask }: {
+  tasks: Task[],
+  selectedDate: string,
+  setSelectedDate: (d: string) => void,
+  toggleTask: (id: string) => void,
+  deleteTask: (id: string) => void
+}) => {
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      if (!t.dueDate) return false;
+      return t.dueDate.startsWith(selectedDate);
+    });
+  }, [tasks, selectedDate]);
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden transition-colors">
       <header className="flex items-center justify-between bg-[#f8f8fc]/80 dark:bg-slate-900/80 backdrop-blur-md px-4 py-3 shrink-0 transition-colors">
         <div className="flex items-center gap-3">
-          <Menu className="text-slate-600 dark:text-slate-300 cursor-pointer" size={24} />
-          <h1 className="text-xl font-bold tracking-tight dark:text-white">今天</h1>
+          <div className="relative">
+            <Menu
+              className="text-slate-600 dark:text-slate-300 cursor-pointer hover:text-[#6464f2] transition-colors"
+              size={24}
+              onClick={() => dateInputRef.current?.showPicker()}
+            />
+            <input
+              ref={dateInputRef}
+              type="date"
+              className="absolute opacity-0 pointer-events-none w-0 h-0"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight dark:text-white">
+            {isToday ? '今天' : selectedDate.slice(5)}
+          </h1>
         </div>
         <div className="flex items-center gap-4">
           <Search className="text-slate-600 dark:text-slate-300 cursor-pointer" size={24} />
@@ -359,16 +429,27 @@ const TodayTasks = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggleTa
       <main className="flex-1 overflow-y-auto px-4 pb-32">
         <div className="flex items-center gap-2 py-4">
           <Calendar className="text-[#6464f2]" size={16} />
-          <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">今日任务</h2>
+          <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            {isToday ? '今日任务' : `${selectedDate} 任务`}
+          </h2>
         </div>
 
         <div className="space-y-3">
-          {tasks.filter(t => !t.completed).map(task => (
-            <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
-          ))}
-          {tasks.filter(t => t.completed).map(task => (
-            <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
-          ))}
+          {filteredTasks.length === 0 ? (
+            <div className="py-12 flex flex-col items-center opacity-40">
+              <CheckSquare size={48} className="mb-2" />
+              <p className="text-sm">该日暂无待办</p>
+            </div>
+          ) : (
+            <>
+              {filteredTasks.filter(t => !t.completed).map(task => (
+                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+              ))}
+              {filteredTasks.filter(t => t.completed).map(task => (
+                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+              ))}
+            </>
+          )}
         </div>
       </main>
     </div>
@@ -430,13 +511,19 @@ const TaskItem = ({ task, toggleTask, deleteTask }: { task: Task, toggleTask: (i
 };
 
 const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void }) => {
+  const systemToday = new Date().toISOString().split('T')[0];
+
+  const todayTasks = useMemo(() => {
+    return tasks.filter(t => t.dueDate?.startsWith(systemToday));
+  }, [tasks, systemToday]);
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden transition-colors">
       <header className="flex items-center bg-white dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-800 justify-between shrink-0 transition-colors">
         <div className="text-slate-700 dark:text-slate-300 flex size-10 shrink-0 items-center justify-center">
           <Menu size={24} className="cursor-pointer" />
         </div>
-        <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight flex-1 text-center">四象限视图</h2>
+        <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight flex-1 text-center">今日工作台</h2>
         <div className="flex w-10 items-center justify-end">
           <button className="flex items-center justify-center rounded-lg h-10 w-10 bg-transparent text-slate-700 dark:text-slate-300">
             <User size={24} />
@@ -450,7 +537,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           icon={<AlertCircle size={12} className="text-white" />}
           colorClass="bg-red-50/50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30"
           headerClass="bg-red-500 dark:bg-red-600/80"
-          tasks={tasks.filter(t => t.quadrant === 'q1')}
+          tasks={todayTasks.filter(t => t.quadrant === 'q1')}
           toggleTask={toggleTask}
         />
         <QuadrantCard
@@ -458,7 +545,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           icon={<Calendar size={12} className="text-white" />}
           colorClass="bg-amber-50/50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30"
           headerClass="bg-amber-500 dark:bg-amber-600/80"
-          tasks={tasks.filter(t => t.quadrant === 'q2')}
+          tasks={todayTasks.filter(t => t.quadrant === 'q2')}
           toggleTask={toggleTask}
         />
         <QuadrantCard
@@ -466,7 +553,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           icon={<UserPlus size={12} className="text-white" />}
           colorClass="bg-blue-50/50 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/30"
           headerClass="bg-blue-500 dark:bg-blue-600/80"
-          tasks={tasks.filter(t => t.quadrant === 'q3')}
+          tasks={todayTasks.filter(t => t.quadrant === 'q3')}
           toggleTask={toggleTask}
         />
         <QuadrantCard
@@ -474,7 +561,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           icon={<Trash2 size={12} className="text-white" />}
           colorClass="bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30"
           headerClass="bg-emerald-500 dark:bg-emerald-600/80"
-          tasks={tasks.filter(t => t.quadrant === 'q4')}
+          tasks={todayTasks.filter(t => t.quadrant === 'q4')}
           toggleTask={toggleTask}
         />
       </main>
@@ -733,6 +820,13 @@ const TimerView = ({
 
           <div className="flex gap-4 w-full">
             <button
+              onClick={() => setTimerMode('focus')}
+              className={`flex-1 flex flex-col items-center justify-center py-3 rounded-xl transition-colors ${mode === 'focus' ? 'bg-[#6464f2]/10 border-[#6464f2]/20 border' : 'bg-slate-100 dark:bg-slate-800'}`}
+            >
+              <Timer size={20} className="text-slate-600 dark:text-slate-300 mb-1" />
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">专注</span>
+            </button>
+            <button
               onClick={() => setTimerMode('shortBreak')}
               className={`flex-1 flex flex-col items-center justify-center py-3 rounded-xl transition-colors ${mode === 'shortBreak' ? 'bg-[#6464f2]/10 border-[#6464f2]/20 border' : 'bg-slate-100 dark:bg-slate-800'}`}
             >
@@ -874,41 +968,61 @@ const VoiceModal = ({ onClose, onBulkSave, onToast }: {
   // 初始化 Web Speech API
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'zh-CN';
-      recognition.interimResults = true;
-      recognition.continuous = true;
+    if (!SpeechRecognition) return;
 
-      recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          finalTranscript += event.results[i][0].transcript;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    // 使用 ref 记录已确定的最终文字，避免 setTranscript 闭包导致重复拼接
+    let finalTranscriptBuffer = '';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let currentFinal = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcriptChunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          currentFinal += transcriptChunk;
+        } else {
+          interimTranscript += transcriptChunk;
         }
-        setTranscript(finalTranscript);
-      };
+      }
 
-      recognition.onerror = (event: any) => {
-        console.error('语音识别错误:', event.error);
-        setIsRecording(false);
-      };
+      finalTranscriptBuffer += currentFinal;
+      // 最终展示 = 累积的 Final + 当前正在识别的 Interim
+      setTranscript(finalTranscriptBuffer + interimTranscript);
+    };
 
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
+    recognition.onerror = (event: any) => {
+      console.error('语音识别错误:', event.error);
+      if (event.error === 'not-allowed') {
+        onToast('麦克风权限被拒绝');
+      }
+      setIsRecording(false);
+    };
 
-      recognitionRef.current = recognition;
-    }
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
 
     return () => {
       if (recognitionRef.current) {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
         try { recognitionRef.current.stop(); } catch { }
+        recognitionRef.current = null;
       }
       if (abortRef.current) {
         abortRef.current.abort();
       }
     };
-  }, []);
+  }, [onToast]);
 
   const toggleRecording = () => {
     if (!recognitionRef.current) return;
