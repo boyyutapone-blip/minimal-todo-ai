@@ -53,7 +53,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
 
     try {
       setIsAILoading(true);
-      const response = await fetch('/api/generate-reflection', {
+      const res = await fetch('/api/generate-reflection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -63,39 +63,38 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('API Error');
+      if (!res.ok) {
+        throw new Error(`后端接口报错: ${res.status} ${res.statusText}`);
       }
 
-      const { questions } = await response.json();
+      const data = await res.json();
 
-      if (questions) {
-        let newNote = '';
-        if (localNote.trim() === '') {
-          newNote = questions;
-        } else {
-          newNote = `${localNote.trim()}\n\n${questions}`;
-        }
+      if (data && data.questions) {
+        // 精准拼接逻辑：如果原来有笔记，追加双换行，否则直接赋值
+        const newNote = localNote ? localNote + '\n\n' + data.questions : data.questions;
         
-        // 1. 同步到 UI 状态
+        // 绑定到本地状态以更新 UI
         setLocalNote(newNote);
         
-        // 2. 模拟 handleSave 自动保存逻辑，不能复用 handleSave 会读到过期的 localNote 闭包
+        // 自动保存至数据库（此处需重新调用 supabase 而不是无参的 handleSave，避免闭包读取旧状态）
         const saveTitle = localTitle.trim() === '' ? task.title : localTitle;
-        const { data, error } = await supabase
+        const { data: updatedData, error } = await supabase
           .from('tasks')
           .update({ title: saveTitle, reflection_note: newNote })
           .eq('id', task.id)
           .select()
           .single();
 
-        if (!error && data && onUpdateTask) {
-          onUpdateTask(data);
+        if (error) {
+          console.error("AI 内容自动保存失败", error);
+        } else if (updatedData && onUpdateTask) {
+          onUpdateTask(updatedData);
         }
       }
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('AI 唤醒失败:', err);
+      alert(`AI 辅助复盘生成失败: ${err.message || '未知网络错误'}`);
     } finally {
       setIsAILoading(false);
     }
