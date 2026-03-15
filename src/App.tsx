@@ -5,6 +5,7 @@ import {
   ChevronRight, ChevronLeft, Bell, Moon, Globe, Shield, HelpCircle, LogOut, Camera, Loader2, Clock
 } from 'lucide-react';
 import AuthView from './components/AuthView';
+import TaskDetailDrawer from './components/TaskDetailDrawer';
 import { supabase } from './lib/supabase';
 
 type Tab = 'list' | 'grid' | 'calendar' | 'timer' | 'settings';
@@ -91,6 +92,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -123,7 +125,21 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [timerMode, setTimerMode] = useState<'focus' | 'shortBreak' | 'longBreak'>('focus');
-  const [pomodoroCount, setPomodoroCount] = useState(0);
+  const [pomodoroCount, setPomodoroCount] = useState(() => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const saved = localStorage.getItem('pomodoro_stats');
+    if (saved) {
+      try {
+        const stats = JSON.parse(saved);
+        if (stats.date === today) return stats.count || 0;
+      } catch (e) {
+        console.error('解析番茄钟统计失败:', e);
+      }
+    }
+    // 跨天或无记录，重置为 0
+    localStorage.setItem('pomodoro_stats', JSON.stringify({ date: today, count: 0 }));
+    return 0;
+  });
 
   // Date Filtering State for List View
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -157,7 +173,12 @@ export default function App() {
     } else if (timeLeft === 0 && isTimerActive) {
       setIsTimerActive(false);
       if (timerMode === 'focus') {
-        setPomodoroCount(prev => prev + 1);
+        setPomodoroCount(prev => {
+          const next = prev + 1;
+          const today = new Date().toLocaleDateString('en-CA');
+          localStorage.setItem('pomodoro_stats', JSON.stringify({ date: today, count: next }));
+          return next;
+        });
       }
     }
     return () => clearInterval(interval);
@@ -315,10 +336,11 @@ export default function App() {
           setSelectedDate={setSelectedDate}
           toggleTask={toggleTask}
           deleteTask={deleteTask}
+          onTaskClick={setSelectedTask}
         />
       )}
-      {activeTab === 'grid' && <QuadrantView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} />}
-      {activeTab === 'calendar' && <CalendarView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} />}
+      {activeTab === 'grid' && <QuadrantView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={setSelectedTask} />}
+      {activeTab === 'calendar' && <CalendarView tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={setSelectedTask} />}
       {activeTab === 'timer' && (
         <TimerView
           timeLeft={timeLeft}
@@ -342,6 +364,9 @@ export default function App() {
           <Plus size={28} />
         </button>
       )}
+
+      {/* Task Detail Drawer */}
+      <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />
 
       {/* Task Modal */}
       {isTaskModalOpen && (
@@ -381,12 +406,13 @@ const NavItem = ({ icon, active, onClick }: { icon: React.ReactNode, active: boo
   </button>
 );
 
-const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTask }: {
+const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTask, onTaskClick }: {
   tasks: Task[],
   selectedDate: string,
   setSelectedDate: (d: string) => void,
   toggleTask: (id: string) => void,
-  deleteTask: (id: string) => void
+  deleteTask: (id: string) => void,
+  onTaskClick: (t: Task) => void
 }) => {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
@@ -443,10 +469,10 @@ const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTa
           ) : (
             <>
               {filteredTasks.filter(t => !t.completed).map(task => (
-                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={onTaskClick} />
               ))}
               {filteredTasks.filter(t => t.completed).map(task => (
-                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+                <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={onTaskClick} />
               ))}
             </>
           )}
@@ -456,7 +482,7 @@ const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTa
   );
 };
 
-const TaskItem = ({ task, toggleTask, deleteTask }: { task: Task, toggleTask: (id: string) => void, deleteTask: (id: string) => void }) => {
+const TaskItem = ({ task, toggleTask, deleteTask, onTaskClick }: { task: Task, toggleTask: (id: string) => void, deleteTask: (id: string) => void, onTaskClick?: (t: Task) => void }) => {
   const longPressRef = useRef<NodeJS.Timeout | null>(null);
 
   const handlePointerDown = () => {
@@ -484,7 +510,7 @@ const TaskItem = ({ task, toggleTask, deleteTask }: { task: Task, toggleTask: (i
           {task.completed && <Check size={14} strokeWidth={3} className="text-white" />}
         </div>
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskClick?.(task)}>
         <p className={`text-base font-medium truncate transition-colors ${task.completed ? 'text-slate-500 dark:text-slate-500 line-through' : 'text-slate-800 dark:text-slate-200'}`}>
           {task.title}
         </p>
@@ -510,7 +536,7 @@ const TaskItem = ({ task, toggleTask, deleteTask }: { task: Task, toggleTask: (i
   );
 };
 
-const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void }) => {
+const QuadrantView = ({ tasks, toggleTask, deleteTask, onTaskClick }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void, onTaskClick: (t: Task) => void }) => {
   const systemToday = new Date().toISOString().split('T')[0];
 
   const todayTasks = useMemo(() => {
@@ -539,6 +565,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           headerClass="bg-red-500 dark:bg-red-600/80"
           tasks={todayTasks.filter(t => t.quadrant === 'q1')}
           toggleTask={toggleTask}
+          onTaskClick={onTaskClick}
         />
         <QuadrantCard
           title="重要不紧急"
@@ -547,6 +574,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           headerClass="bg-amber-500 dark:bg-amber-600/80"
           tasks={todayTasks.filter(t => t.quadrant === 'q2')}
           toggleTask={toggleTask}
+          onTaskClick={onTaskClick}
         />
         <QuadrantCard
           title="不重要但紧急"
@@ -555,6 +583,7 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           headerClass="bg-blue-500 dark:bg-blue-600/80"
           tasks={todayTasks.filter(t => t.quadrant === 'q3')}
           toggleTask={toggleTask}
+          onTaskClick={onTaskClick}
         />
         <QuadrantCard
           title="不重要不紧急"
@@ -563,13 +592,14 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
           headerClass="bg-emerald-500 dark:bg-emerald-600/80"
           tasks={todayTasks.filter(t => t.quadrant === 'q4')}
           toggleTask={toggleTask}
+          onTaskClick={onTaskClick}
         />
       </main>
     </div>
   );
 };
 
-const QuadrantCard = ({ title, icon, colorClass, headerClass, tasks, toggleTask }: any) => {
+const QuadrantCard = ({ title, icon, colorClass, headerClass, tasks, toggleTask, onTaskClick }: any) => {
   return (
     <section className={`flex flex-col rounded-xl border overflow-hidden transition-colors ${colorClass}`}>
       <div className={`${headerClass} px-2.5 py-1.5 flex items-center gap-1.5 shrink-0 transition-colors`}>
@@ -578,7 +608,7 @@ const QuadrantCard = ({ title, icon, colorClass, headerClass, tasks, toggleTask 
       </div>
       <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
         {tasks.map((task: Task) => (
-          <div key={task.id} className="bg-white/80 dark:bg-slate-800/80 p-1.5 px-2 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-start gap-1.5 transition-colors backdrop-blur-sm">
+          <div key={task.id} onClick={() => onTaskClick?.(task)} className="bg-white/80 dark:bg-slate-800/80 p-1.5 px-2 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50 flex items-start gap-1.5 transition-colors backdrop-blur-sm cursor-pointer hover:border-[#6464f2]/30">
             <div
               onClick={() => toggleTask(task.id)}
               className={`mt-[2px] shrink-0 h-3.5 w-3.5 rounded-[3px] border flex items-center justify-center cursor-pointer transition-colors ${task.completed ? headerClass + ' border-transparent' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'}`}
@@ -596,7 +626,7 @@ const QuadrantCard = ({ title, icon, colorClass, headerClass, tasks, toggleTask 
 // ============================================
 // 日历视图（紫色极简极客风）
 // ============================================
-const CalendarView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void }) => {
+const CalendarView = ({ tasks, toggleTask, deleteTask, onTaskClick }: { tasks: Task[], toggleTask: (id: string) => void, deleteTask: (id: string) => void, onTaskClick: (t: Task) => void }) => {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -722,7 +752,7 @@ const CalendarView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
         ) : (
           <div className="space-y-3">
             {selectedTasks.filter(t => !t.completed).map(task => (
-              <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+              <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={onTaskClick} />
             ))}
             {selectedTasks.some(t => t.completed) && (
               <div className="flex items-center gap-2 pt-2 pb-1">
@@ -732,7 +762,7 @@ const CalendarView = ({ tasks, toggleTask, deleteTask }: { tasks: Task[], toggle
               </div>
             )}
             {selectedTasks.filter(t => t.completed).map(task => (
-              <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} />
+              <TaskItem key={task.id} task={task} toggleTask={toggleTask} deleteTask={deleteTask} onTaskClick={onTaskClick} />
             ))}
           </div>
         )}
