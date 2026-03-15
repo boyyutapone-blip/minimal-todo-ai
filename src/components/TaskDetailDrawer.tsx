@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Clock, Flag, Hash } from 'lucide-react';
+import { X, Sparkles, Clock, Flag, Hash, Loader2, Save } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
 
 export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task: any, onClose: () => void, onUpdateTask?: (task: any) => void }) {
   const [localTitle, setLocalTitle] = useState('');
   const [localNote, setLocalNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -14,8 +15,8 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
     }
   }, [task]);
 
-  const handleBlur = async () => {
-    if (!task) return;
+  const handleSave = async () => {
+    if (!task || isSaving) return;
     
     // 如果标题为空，回退为原标题，防止幽灵任务
     const saveTitle = localTitle.trim() === '' ? task.title : localTitle;
@@ -23,12 +24,8 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
       setLocalTitle(saveTitle);
     }
 
-    // 检查是否有实质性改变
-    if (saveTitle === task.title && localNote === (task.reflection_note || '')) {
-      return; 
-    }
-
     try {
+      setIsSaving(true);
       const { data, error } = await supabase
         .from('tasks')
         .update({ title: saveTitle, reflection_note: localNote })
@@ -44,6 +41,8 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
       }
     } catch (err) {
       console.error('保存任务详情失败:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -116,7 +115,6 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
             <textarea
               value={localTitle}
               onChange={e => setLocalTitle(e.target.value)}
-              onBlur={handleBlur}
               className="w-full bg-transparent border-none text-[22px] leading-snug font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-0 resize-none p-0 overflow-hidden min-h-[4rem]"
               placeholder="任务描述..."
             />
@@ -127,21 +125,36 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
             <textarea
               value={localNote}
               onChange={e => setLocalNote(e.target.value)}
-              onBlur={handleBlur}
               className="w-full flex-1 bg-transparent border-none text-slate-600 dark:text-slate-300 text-[15px] leading-relaxed focus:outline-none focus:ring-0 resize-none p-0"
               placeholder="在这里记录任务灵感或手动复盘..."
             />
           </div>
         </div>
 
-        {/* AI 魔法悬浮按钮 */}
-        <button 
-          onClick={() => console.log('唤起 AI')}
-          className="absolute bottom-8 right-6 z-10 flex items-center gap-2.5 px-5 py-3.5 rounded-2xl bg-gradient-to-tr from-[#6464f2] to-purple-500 text-white font-bold shadow-xl shadow-purple-500/30 hover:scale-[1.02] hover:shadow-purple-500/50 active:scale-95 transition-all group"
-        >
-          <Sparkles size={18} className="group-hover:animate-pulse" />
-          AI 辅助复盘
-        </button>
+        {/* 底部悬浮操作区 */}
+        <div className="absolute bottom-8 left-6 right-6 flex items-center justify-between pointer-events-none">
+          {/* 保存按钮 */}
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="pointer-events-auto flex items-center gap-2 px-5 py-3.5 rounded-xl border-2 border-[#6464f2]/30 text-[#6464f2] dark:text-[#8080ff] bg-white/80 dark:bg-slate-800/80 backdrop-blur-md font-bold shadow-sm hover:bg-[#6464f2]/10 dark:hover:bg-[#6464f2]/20 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all shadow-[#6464f2]/10"
+          >
+            {isSaving ? (
+              <><Loader2 size={18} className="animate-spin" /> 保存中</>
+            ) : (
+              <><Save size={18} /> 保存内容</>
+            )}
+          </button>
+          
+          {/* AI 魔法悬浮按钮 */}
+          <button 
+            onClick={() => console.log('唤起 AI')}
+            className="pointer-events-auto flex items-center gap-2.5 px-5 py-3.5 rounded-xl bg-gradient-to-tr from-[#6464f2] to-purple-500 text-white font-bold shadow-xl shadow-purple-500/30 hover:scale-[1.02] hover:shadow-purple-500/50 active:scale-95 transition-all group"
+          >
+            <Sparkles size={18} className="group-hover:animate-pulse" />
+            AI 复盘
+          </button>
+        </div>
       </div>
     </div>
   );
