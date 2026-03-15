@@ -19,6 +19,7 @@ interface Task {
   tags?: string[];
   isFlagged?: boolean;
   dueDate?: string | null;
+  reflection_note?: string;
 }
 
 // DB row type returned from Supabase
@@ -31,6 +32,7 @@ interface TaskRow {
   is_important: boolean;
   due_date: string | null;
   created_at: string;
+  reflection_note?: string;
 }
 
 // AI 解析返回的单个任务
@@ -51,6 +53,7 @@ const mapRowToTask = (row: TaskRow): Task => ({
   tags: row.tags || [],
   isFlagged: row.is_important,
   dueDate: row.due_date,
+  reflection_note: row.reflection_note || '',
 });
 
 // ── 格式化 due_date 显示 ──

@@ -24,26 +24,27 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
       setLocalTitle(saveTitle);
     }
 
-    try {
-      setIsSaving(true);
-      const { data, error } = await supabase
-        .from('tasks')
-        .update({ title: saveTitle, reflection_note: localNote })
-        .eq('id', task.id)
-        .select()
-        .single();
+    setIsSaving(true);
 
-      if (error) throw error;
-      
-      // 成功后，同步将最新状态给上层
-      if (data && onUpdateTask) {
-        onUpdateTask(data);
-      }
-    } catch (err) {
-      console.error('保存任务详情失败:', err);
-    } finally {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ title: saveTitle, reflection_note: localNote })
+      .eq('id', task.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("保存失败", error);
       setIsSaving(false);
+      return;
     }
+
+    if (data && onUpdateTask) {
+      // 必须把数据库返回的绝对正确、包含最新 note 的数据传给父组件！
+      onUpdateTask(data); 
+    }
+    
+    setIsSaving(false);
   };
 
   if (!task) return null;
@@ -123,7 +124,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
           {/* 核心笔记区 */}
           <div className="flex-1 flex flex-col mt-2">
             <textarea
-              value={localNote}
+              value={localNote || ''}
               onChange={e => setLocalNote(e.target.value)}
               className="w-full flex-1 bg-transparent border-none text-slate-600 dark:text-slate-300 text-[15px] leading-relaxed focus:outline-none focus:ring-0 resize-none p-0"
               placeholder="在这里记录任务灵感或手动复盘..."
