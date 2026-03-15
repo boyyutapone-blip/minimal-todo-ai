@@ -1,16 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Clock, Flag, Hash } from 'lucide-react';
 
-export default function TaskDetailDrawer({ task, onClose }: { task: any, onClose: () => void }) {
-  const [title, setTitle] = useState('');
-  const [note, setNote] = useState('');
+import { supabase } from '../lib/supabase';
+
+export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task: any, onClose: () => void, onUpdateTask?: (task: any) => void }) {
+  const [localTitle, setLocalTitle] = useState('');
+  const [localNote, setLocalNote] = useState('');
 
   useEffect(() => {
     if (task) {
-      setTitle(task.title);
-      setNote(''); // 本地临时绑定，这里暂不做 Supabase update
+      setLocalTitle(task.title || '');
+      setLocalNote(task.reflection_note || '');
     }
   }, [task]);
+
+  const handleBlur = async () => {
+    if (!task) return;
+    
+    // 如果标题为空，回退为原标题，防止幽灵任务
+    const saveTitle = localTitle.trim() === '' ? task.title : localTitle;
+    if (saveTitle !== localTitle) {
+      setLocalTitle(saveTitle);
+    }
+
+    // 检查是否有实质性改变
+    if (saveTitle === task.title && localNote === (task.reflection_note || '')) {
+      return; 
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({ title: saveTitle, reflection_note: localNote })
+        .eq('id', task.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // 成功后，同步将最新状态给上层
+      if (data && onUpdateTask) {
+        onUpdateTask(data);
+      }
+    } catch (err) {
+      console.error('保存任务详情失败:', err);
+    }
+  };
 
   if (!task) return null;
 
@@ -79,8 +114,9 @@ export default function TaskDetailDrawer({ task, onClose }: { task: any, onClose
           {/* 标题沉浸式编辑区 */}
           <div className="mt-2">
             <textarea
-              value={title}
-              onChange={e => setTitle(e.target.value)}
+              value={localTitle}
+              onChange={e => setLocalTitle(e.target.value)}
+              onBlur={handleBlur}
               className="w-full bg-transparent border-none text-[22px] leading-snug font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-0 resize-none p-0 overflow-hidden min-h-[4rem]"
               placeholder="任务描述..."
             />
@@ -89,8 +125,9 @@ export default function TaskDetailDrawer({ task, onClose }: { task: any, onClose
           {/* 核心笔记区 */}
           <div className="flex-1 flex flex-col mt-2">
             <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
+              value={localNote}
+              onChange={e => setLocalNote(e.target.value)}
+              onBlur={handleBlur}
               className="w-full flex-1 bg-transparent border-none text-slate-600 dark:text-slate-300 text-[15px] leading-relaxed focus:outline-none focus:ring-0 resize-none p-0"
               placeholder="在这里记录任务灵感或手动复盘..."
             />

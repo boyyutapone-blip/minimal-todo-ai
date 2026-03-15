@@ -213,6 +213,16 @@ export default function App() {
     }
   };
 
+  const handleUpdateTask = (updatedTaskRow: any) => {
+    const updatedTask = mapRowToTask(updatedTaskRow);
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    
+    // 如果当前选中的任务正好是被更新的这个，也顺便更新一下选中项（可选，不过 drawer 内部通常已有 state 控制）
+    if (selectedTask?.id === updatedTask.id) {
+      setSelectedTask(updatedTask);
+    }
+  };
+
   // ── 新增单个任务（手动新建用） ──
   const addTask = async (newTask: Omit<Task, 'id' | 'completed'>) => {
     const { data, error } = await supabase
@@ -366,7 +376,11 @@ export default function App() {
       )}
 
       {/* Task Detail Drawer */}
-      <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} />
+      <TaskDetailDrawer 
+        task={selectedTask} 
+        onClose={() => setSelectedTask(null)} 
+        onUpdateTask={handleUpdateTask} 
+      />
 
       {/* Task Modal */}
       {isTaskModalOpen && (
