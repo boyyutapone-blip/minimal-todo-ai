@@ -7,6 +7,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
   const [localTitle, setLocalTitle] = useState('');
   const [localNote, setLocalNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAILoading, setIsAILoading] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -45,6 +46,59 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
     }
     
     setIsSaving(false);
+  };
+
+  const handleAICoach = async () => {
+    if (!task || isAILoading || isSaving) return;
+
+    try {
+      setIsAILoading(true);
+      const response = await fetch('/api/generate-reflection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: task.title,
+          quadrant: task.quadrant,
+          tags: task.tags || []
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('API Error');
+      }
+
+      const { questions } = await response.json();
+
+      if (questions) {
+        let newNote = '';
+        if (localNote.trim() === '') {
+          newNote = questions;
+        } else {
+          newNote = `${localNote.trim()}\n\n${questions}`;
+        }
+        
+        // 1. 同步到 UI 状态
+        setLocalNote(newNote);
+        
+        // 2. 模拟 handleSave 自动保存逻辑，不能复用 handleSave 会读到过期的 localNote 闭包
+        const saveTitle = localTitle.trim() === '' ? task.title : localTitle;
+        const { data, error } = await supabase
+          .from('tasks')
+          .update({ title: saveTitle, reflection_note: newNote })
+          .eq('id', task.id)
+          .select()
+          .single();
+
+        if (!error && data && onUpdateTask) {
+          onUpdateTask(data);
+        }
+      }
+
+    } catch (err) {
+      console.error('AI 唤醒失败:', err);
+    } finally {
+      setIsAILoading(false);
+    }
   };
 
   if (!task) return null;
@@ -149,11 +203,15 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
           
           {/* AI 魔法悬浮按钮 */}
           <button 
-            onClick={() => console.log('唤起 AI')}
-            className="pointer-events-auto flex items-center gap-2.5 px-5 py-3.5 rounded-xl bg-gradient-to-tr from-[#6464f2] to-purple-500 text-white font-bold shadow-xl shadow-purple-500/30 hover:scale-[1.02] hover:shadow-purple-500/50 active:scale-95 transition-all group"
+            onClick={handleAICoach}
+            disabled={isAILoading || isSaving}
+            className="pointer-events-auto flex items-center gap-2.5 px-5 py-3.5 rounded-xl bg-gradient-to-tr from-[#6464f2] to-purple-500 text-white font-bold shadow-xl shadow-purple-500/30 hover:scale-[1.02] hover:shadow-purple-500/50 active:scale-95 transition-all group disabled:opacity-75 disabled:active:scale-100 disabled:hover:scale-100"
           >
-            <Sparkles size={18} className="group-hover:animate-pulse" />
-            AI 复盘
+            {isAILoading ? (
+              <><Loader2 size={18} className="animate-spin" /> 生成追问中</>
+            ) : (
+              <><Sparkles size={18} className="group-hover:animate-pulse" /> AI 复盘</>
+            )}
           </button>
         </div>
       </div>
