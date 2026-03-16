@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# [Minimal-todo-ai]：基于 LUI 驱动的个人精力与任务量化系统
 
-# Run and deploy your AI Studio app
+> **一句话介绍**：这不仅是一个 To-Do 应用，而是一个通过大模型（LUI 交互）彻底重塑输入体验、旨在降低用户操作摩擦力并量化精力消耗的 AI 智能体产品 (MVP)。
 
-This contains everything you need to run your app locally.
+## 💡 产品定位与痛点洞察 (Product Vision)
 
-View your app in AI Studio: https://ai.studio/apps/abc14b6a-fd22-4e35-ab23-ca4a1728b1ee
+传统任务管理软件（如各类日历、滴答清单）本质上是基于 GUI（图形用户界面）的表单填报系统。对于希望高频量化自我但又畏惧繁琐操作的用户而言，存在极大的**交互摩擦力**。
 
-## Run Locally
+- **核心痛点**：管理任务的成本大于执行任务本身的价值。用户难以长期坚持填写表单来追踪碎片化的学习产出与精力消耗。
+- **破局思路**：引入 AI 极大降低录入成本。将“点选表单”转化为“自然语言对话”，实现从“被动记录”到“自动追踪”的闭环。
 
-**Prerequisites:**  Node.js
+## ✨ 核心交互重塑：LUI 替代 GUI
 
+传统软件需要 5 步操作（点击新建 -> 输入标题 -> 选择日期 -> 选择标签 -> 保存）。
+IntelliFlow 只需要 1 步自然语言输入：
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- **用户输入**：“明天下午花两个小时复习 Python 的字典和列表”
+- **AI 自动解析**：系统后台大模型自动提取任务要素、打上“编程学习”标签，并量化出“2小时”的精力消耗指标，直接写入数据库。
+
+## 🏗 技术架构与选型思考 (Architecture)
+
+本产品由本人独立负责产品设计，并通过 Vibe Coding（大模型辅助编程）完成全栈敏捷开发与云端部署。
+
+| 模块                 | 技术选型                         | 产品选型逻辑（Why）                                          |
+| :------------------- | :------------------------------- | :----------------------------------------------------------- |
+| **工作流与模型编排** | Stitch + AI Studio + Antigravity | 具备强大的意图识别与上下文处理能力，能完美胜任自然语言到结构化数据的解析任务。 |
+| **云端数据库**       | Supabase (PostgreSQL)            | 提供开箱即用的 BaaS 服务，大幅降低后端开发成本，确保任务与精力标签数据的稳定流转。 |
+| **前端与部署**       | Vercel                           | 极速的全球边缘网络部署，完美契合敏捷迭代与 MVP 快速验证的产品生命周期。 |
+
+## 🚀 敏捷开发实践 (Vibe Coding)
+
+本项目是 AI 时代应用开发的典型实践。通过将清晰的业务逻辑与底层数学推导思维转化为精准的 Prompt，利用 AI 代码助手直接驱动前后端代码生成。证明了在 AI 工具链赋能下，产品经理可以跨越代码边界，一人成军完成从 0 到 1 的应用落地。
+
+## 🛠 快速体验 (Quick Start)
+
+*(这里可以放上别人如果想克隆你的项目跑起来，需要执行的简单代码)*
+
+1. 克隆本项目：`git clone https://github.com/yourusername/intelliflow.git`
+2. 配置环境变量：将 `.env.example` 重命名为 `.env` 并填入你的 API Key 和 Supabase 链接。
+3. 启动项目： npm run dev 
