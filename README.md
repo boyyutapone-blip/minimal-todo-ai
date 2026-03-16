@@ -1,4 +1,4 @@
-# [Minimal-todo-ai]：基于 LUI 驱动的个人精力与任务量化系统
+# [Minimal-Todo-AI]：基于 LUI 驱动的个人精力与任务量化系统
 
 > **一句话介绍**：这不仅是一个 To-Do 应用，而是一个通过大模型（LUI 交互）彻底重塑输入体验、旨在降低用户操作摩擦力并量化精力消耗的 AI 智能体产品 (MVP)。
 
@@ -34,7 +34,6 @@ IntelliFlow 只需要 1 步自然语言输入：
 ## 🛠 快速体验 (Quick Start)
 
 *(这里可以放上别人如果想克隆你的项目跑起来，需要执行的简单代码)*
-
 1. 克隆本项目：`git clone https://github.com/yourusername/intelliflow.git`
 2. 配置环境变量：将 `.env.example` 重命名为 `.env` 并填入你的 API Key 和 Supabase 链接。
 3. 启动项目： npm run dev 
