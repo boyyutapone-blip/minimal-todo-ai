@@ -438,6 +438,10 @@ const TodayTasks = ({ tasks, selectedDate, setSelectedDate, toggleTask, deleteTa
     return tasks.filter(t => {
       if (!t.dueDate) return false;
       return t.dueDate.startsWith(selectedDate);
+    }).sort((a, b) => {
+      const timeA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const timeB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return timeA - timeB;
     });
   }, [tasks, selectedDate]);
 
@@ -557,7 +561,11 @@ const QuadrantView = ({ tasks, toggleTask, deleteTask, onTaskClick }: { tasks: T
   const systemToday = new Date().toISOString().split('T')[0];
 
   const todayTasks = useMemo(() => {
-    return tasks.filter(t => t.dueDate?.startsWith(systemToday));
+    return tasks.filter(t => t.dueDate?.startsWith(systemToday)).sort((a, b) => {
+      const timeA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const timeB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return timeA - timeB;
+    });
   }, [tasks, systemToday]);
 
   return (
@@ -673,6 +681,10 @@ const CalendarView = ({ tasks, toggleTask, deleteTask, onTaskClick }: { tasks: T
       if (!t.dueDate) return false;
       const d = new Date(t.dueDate);
       return d.getFullYear() === viewYear && d.getMonth() === viewMonth && d.getDate() === selectedDate;
+    }).sort((a, b) => {
+      const timeA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const timeB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return timeA - timeB;
     });
   }, [tasks, viewYear, viewMonth, selectedDate]);
 
