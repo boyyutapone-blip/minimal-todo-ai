@@ -90,7 +90,8 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
         body: JSON.stringify({
           title: task.title,
           quadrant: task.quadrant,
-          tags: task.tags || []
+          tags: task.tags || [],
+          currentNote: localNote
         }),
       });
 
