@@ -1,18 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Clock, Flag, Hash, Loader2, Save } from 'lucide-react';
+import { X, Sparkles, Clock, Flag, Hash, Loader2, Save, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { supabase } from '../lib/supabase';
+
+type Quadrant = 'q1' | 'q2' | 'q3' | 'q4';
 
 export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task: any, onClose: () => void, onUpdateTask?: (task: any) => void }) {
   const [localTitle, setLocalTitle] = useState('');
   const [localNote, setLocalNote] = useState('');
+  const [localQuadrant, setLocalQuadrant] = useState<Quadrant>('q1');
+  const [localTags, setLocalTags] = useState('');
+  const [localIsFlagged, setLocalIsFlagged] = useState(false);
+  const [localDueDate, setLocalDueDate] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
+  const [isEditExpanded, setIsEditExpanded] = useState(false);
 
   useEffect(() => {
     if (task) {
       setLocalTitle(task.title || '');
       setLocalNote(task.reflection_note || '');
+      setLocalQuadrant(task.quadrant || 'q1');
+      setLocalTags(task.tags?.join(', ') || '');
+      setLocalIsFlagged(task.isFlagged || false);
+      // Convert ISO string to datetime-local format
+      if (task.dueDate) {
+        const d = new Date(task.dueDate);
+        const year = d.getFullYear();
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const day = d.getDate().toString().padStart(2, '0');
+        const hours = d.getHours().toString().padStart(2, '0');
+        const minutes = d.getMinutes().toString().padStart(2, '0');
+        setLocalDueDate(`${year}-${month}-${day}T${hours}:${minutes}`);
+      } else {
+        setLocalDueDate('');
+      }
+      setIsEditExpanded(false);
     }
   }, [task]);
 
@@ -25,11 +48,20 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
       setLocalTitle(saveTitle);
     }
 
+    const parsedTags = localTags.split(',').map(t => t.trim()).filter(t => t);
+
     setIsSaving(true);
 
     const { data, error } = await supabase
       .from('tasks')
-      .update({ title: saveTitle, reflection_note: localNote })
+      .update({
+        title: saveTitle,
+        reflection_note: localNote,
+        quadrant: localQuadrant,
+        tags: parsedTags,
+        is_important: localIsFlagged,
+        due_date: localDueDate ? new Date(localDueDate).toISOString() : null,
+      })
       .eq('id', task.id)
       .select()
       .single();
@@ -41,7 +73,6 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
     }
 
     if (data && onUpdateTask) {
-      // 必须把数据库返回的绝对正确、包含最新 note 的数据传给父组件！
       onUpdateTask(data); 
     }
     
@@ -70,17 +101,21 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
       const data = await res.json();
 
       if (data && data.questions) {
-        // 精准拼接逻辑：如果原来有笔记，追加双换行，否则直接赋值
         const newNote = localNote ? localNote + '\n\n' + data.questions : data.questions;
-        
-        // 绑定到本地状态以更新 UI
         setLocalNote(newNote);
         
-        // 自动保存至数据库（此处需重新调用 supabase 而不是无参的 handleSave，避免闭包读取旧状态）
         const saveTitle = localTitle.trim() === '' ? task.title : localTitle;
+        const parsedTags = localTags.split(',').map(t => t.trim()).filter(t => t);
         const { data: updatedData, error } = await supabase
           .from('tasks')
-          .update({ title: saveTitle, reflection_note: newNote })
+          .update({
+            title: saveTitle,
+            reflection_note: newNote,
+            quadrant: localQuadrant,
+            tags: parsedTags,
+            is_important: localIsFlagged,
+            due_date: localDueDate ? new Date(localDueDate).toISOString() : null,
+          })
           .eq('id', task.id)
           .select()
           .single();
@@ -110,7 +145,7 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
     q4: { text: '不重要不紧急', color: 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800' },
   };
 
-  const quad = quadConfig[task.quadrant] || quadConfig['q1'];
+  const quad = quadConfig[localQuadrant] || quadConfig['q1'];
 
   const formatDue = (iso: string) => {
     const d = new Date(iso);
@@ -139,29 +174,100 @@ export default function TaskDetailDrawer({ task, onClose, onUpdateTask }: { task
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-32 flex flex-col gap-5">
-          {/* 元信息区：紧凑横向排列 */}
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            {task.dueDate && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-red-500 bg-red-50/50 dark:bg-red-900/10 border border-red-100/50 dark:border-red-900/30">
-                <Clock size={12} />
-                {formatDue(task.dueDate)}
+          {/* 元信息区：可点击展开编辑 */}
+          <div className="mt-2">
+            {/* 只读展示标签 */}
+            <div className="flex flex-wrap items-center gap-2">
+              {localDueDate && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-red-500 bg-red-50/50 dark:bg-red-900/10 border border-red-100/50 dark:border-red-900/30">
+                  <Clock size={12} />
+                  {formatDue(localDueDate)}
+                </div>
+              )}
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${quad.color}`}>
+                {quad.text}
               </div>
-            )}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${quad.color}`}>
-              {quad.text}
+              {localIsFlagged && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-orange-500 bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100/50 dark:border-orange-900/30">
+                  <Flag size={12} className="fill-orange-500" />
+                  重要
+                </div>
+              )}
+              {localTags.split(',').map(t => t.trim()).filter(t => t).map((tag: string) => (
+                <div key={tag} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-[#6464f2] bg-[#6464f2]/10 border border-[#6464f2]/20">
+                  <Hash size={12} />
+                  {tag}
+                </div>
+              ))}
+              
+              {/* 展开/收起编辑按钮 */}
+              <button 
+                onClick={() => setIsEditExpanded(!isEditExpanded)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                {isEditExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {isEditExpanded ? '收起' : '编辑属性'}
+              </button>
             </div>
-            {task.isFlagged && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-orange-500 bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100/50 dark:border-orange-900/30">
-                <Flag size={12} className="fill-orange-500" />
-                重要
+
+            {/* 可展开的编辑区域 */}
+            {isEditExpanded && (
+              <div className="mt-3 space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2 duration-200">
+                {/* 象限选择 */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">所属象限</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['q1', 'q2', 'q3', 'q4'] as Quadrant[]).map(q => {
+                      const qConf = quadConfig[q];
+                      const isSelected = localQuadrant === q;
+                      return (
+                        <button
+                          key={q}
+                          onClick={() => setLocalQuadrant(q)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${isSelected ? qConf.color + ' ring-2 ring-offset-1 ring-current dark:ring-offset-slate-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                        >
+                          {qConf.text}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 标签编辑 */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">标签 (逗号分隔)</label>
+                  <input
+                    type="text"
+                    value={localTags}
+                    onChange={(e) => setLocalTags(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6464f2]/50 focus:border-[#6464f2] transition-colors"
+                    placeholder="工作, 学习"
+                  />
+                </div>
+
+                {/* 重点标记 */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLocalIsFlagged(!localIsFlagged)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${localIsFlagged ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
+                  >
+                    <Flag size={14} className={localIsFlagged ? "fill-orange-500" : ""} />
+                    <span className="text-xs">标记为重点</span>
+                  </button>
+                </div>
+
+                {/* 开始时间编辑 */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">开始时间</label>
+                  <input
+                    type="datetime-local"
+                    value={localDueDate}
+                    onChange={(e) => setLocalDueDate(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#6464f2]/50 focus:border-[#6464f2] transition-colors"
+                  />
+                </div>
               </div>
             )}
-            {task.tags?.map((tag: string) => (
-              <div key={tag} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-[#6464f2] bg-[#6464f2]/10 border border-[#6464f2]/20">
-                <Hash size={12} />
-                {tag}
-              </div>
-            ))}
           </div>
 
           {/* 标题沉浸式编辑区 */}

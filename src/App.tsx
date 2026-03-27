@@ -967,7 +967,7 @@ const TaskModal = ({ onClose, onSave }: { onClose: () => void, onSave: (task: Om
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">截止时间</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">开始时间</label>
             <input
               type="datetime-local"
               value={dueDate}
